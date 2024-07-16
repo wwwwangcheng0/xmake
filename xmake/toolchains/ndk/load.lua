@@ -171,21 +171,24 @@ function main(toolchain)
                 toolchain:add("cxflags", "-D__ANDROID_API__=" .. ndk_sdkver)
                 toolchain:add("asflags", "-D__ANDROID_API__=" .. ndk_sdkver)
             end
-            toolchain:add("cflags",  "--sysroot=" .. ndk_sysroot)
-            toolchain:add("cxxflags","--sysroot=" .. ndk_sysroot)
-            toolchain:add("asflags", "--sysroot=" .. ndk_sysroot)
-            toolchain:add("cflags",  "-isystem " .. path.join(ndk_sysroot, "usr", "include", triple))
-            toolchain:add("cxxflags","-isystem " .. path.join(ndk_sysroot, "usr", "include", triple))
-            toolchain:add("asflags", "-isystem " .. path.join(ndk_sysroot, "usr", "include", triple))
+            local flag_sysroot = "--sysroot=" .. os.args(ndk_sysroot)
+            local flag_isystem = "-isystem " .. os.args(path.join(ndk_sysroot, "usr", "include", triple))
+            toolchain:add("cflags",   flag_sysroot)
+            toolchain:add("cxxflags", flag_sysroot)
+            toolchain:add("asflags",  flag_sysroot)
+            toolchain:add("cflags",   flag_isystem)
+            toolchain:add("cxxflags", flag_isystem)
+            toolchain:add("asflags",  flag_isystem)
         else
             local ndk_sdkdir = path.translate(format("%s/platforms/android-%d", ndk, ndk_sdkver))
             if os.isdir(ndk_sdkdir) then
                 if sysroot_arch then
-                    toolchain:add("cflags",   format("--sysroot=%s/%s", ndk_sdkdir, sysroot_arch))
-                    toolchain:add("cxxflags", format("--sysroot=%s/%s", ndk_sdkdir, sysroot_arch))
-                    toolchain:add("asflags",  format("--sysroot=%s/%s", ndk_sdkdir, sysroot_arch))
-                    toolchain:add("ldflags", format("--sysroot=%s/%s", ndk_sdkdir, sysroot_arch))
-                    toolchain:add("shflags", format("--sysroot=%s/%s", ndk_sdkdir, sysroot_arch))
+                    local flag_sysroot = "--sysroot=" .. os.args(path.join(ndk_sdkdir, sysroot_arch))
+                    toolchain:add("cflags",   flag_sysroot)
+                    toolchain:add("cxxflags", flag_sysroot)
+                    toolchain:add("asflags",  flag_sysroot)
+                    toolchain:add("ldflags",  flag_sysroot)
+                    toolchain:add("shflags",  flag_sysroot)
                 end
             end
         end

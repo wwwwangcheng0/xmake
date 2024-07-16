@@ -201,6 +201,10 @@ function _get_specvars(package)
     specvars.PACKAGE_WORKDIR = path.absolute(os.projectdir())
     specvars.PACKAGE_BINDIR = _translate_filepath(package, package:bindir())
     specvars.PACKAGE_OUTPUTFILE = path.absolute(package:outputfile())
+    if specvars.PACKAGE_VERSION_BUILD then
+        -- @see https://github.com/xmake-io/xmake/issues/5306
+        specvars.PACKAGE_VERSION_BUILD = specvars.PACKAGE_VERSION_BUILD:gsub(" ", "_")
+    end
     specvars.PACKAGE_INSTALLCMDS = function ()
         return _get_installcmds(package)
     end
@@ -229,7 +233,7 @@ function _get_specvars(package)
             table.insert(install_sections, string.format('Section%s "%s" %s', component:get("default") == false and " /o" or "", component:title(), tag))
             table.insert(install_sections, installcmds)
             table.insert(install_sections, "SectionEnd")
-            table.insert(install_descs, string.format('LangString DESC_%s ${LANG_ENGLISH} "%s"', tag, description))
+            table.insert(install_descs, string.format('LangString DESC_%s ${LANG_ENGLISH} "%s"', tag, component:description() or ""))
             table.insert(install_description_texts, string.format('!insertmacro MUI_DESCRIPTION_TEXT ${%s} $(DESC_%s)', tag, tag))
         end
         local uninstallcmds = _get_component_uninstallcmds(component)
@@ -250,9 +254,9 @@ end
 function _pack_nsis(makensis, package)
 
     -- install the initial specfile
-    local specfile = package:specfile()
+    local specfile = path.join(package:buildir(), package:basename() .. ".nsi")
     if not os.isfile(specfile) then
-        local specfile_template = path.join(os.programdir(), "scripts", "xpack", "nsis", "makensis.nsi")
+        local specfile_template = package:get("specfile") or path.join(os.programdir(), "scripts", "xpack", "nsis", "makensis.nsi")
         os.cp(specfile_template, specfile)
     end
 

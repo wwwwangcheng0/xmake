@@ -20,6 +20,7 @@
 
 -- imports
 import("core.base.option")
+import("core.base.semver")
 import("core.project.config")
 import("detect.sdks.find_vstudio")
 
@@ -56,7 +57,7 @@ function main(toolchain)
     toolchain:set("toolset", "mrc", "rc.exe")
     if toolchain:is_arch("x86") then
         toolchain:set("toolset", "as",  "ml.exe")
-    elseif toolchain:is_arch("arm64") then
+    elseif toolchain:is_arch("arm64", "arm64ec") then
         toolchain:set("toolset", "as",  "armasm64_msvc@armasm64.exe")
     elseif toolchain:is_arch("arm.*") then
         toolchain:set("toolset", "as",  "armasm_msvc@armasm.exe")
@@ -66,6 +67,11 @@ function main(toolchain)
     toolchain:set("toolset", "ld",  "link.exe")
     toolchain:set("toolset", "sh",  "link.exe")
     toolchain:set("toolset", "ar",  "link.exe")
+
+    -- init flags
+    if toolchain:is_arch("arm64ec") then
+        toolchain:add("cxflags", "/arm64EC")
+    end
 
     -- add vs environments
     local expect_vars = {"PATH", "LIB", "INCLUDE", "LIBPATH"}
@@ -77,6 +83,12 @@ function main(toolchain)
         if not table.contains(expect_vars, name:upper()) then
             _add_vsenv(toolchain, name, curenvs)
         end
+    end
+
+    -- check and add vs_binary_output env
+    local vs = toolchain:config("vs")
+    if vs and semver.is_valid(vs) and semver.compare(vs, "2005") < 0 then
+        toolchain:add("runenvs", "VS_BINARY_OUTPUT", "1")
     end
 end
 

@@ -100,10 +100,11 @@ end
 -- get vs arch
 function _get_vsarch(package)
     local arch = package:arch()
-    if arch == 'x86' or arch == 'i386' then return "Win32" end
-    if arch == 'x86_64' then return "x64" end
-    if arch:startswith('arm64') then return "ARM64" end
-    if arch:startswith('arm') then return "ARM" end
+    if arch == "x86" or arch == "i386" then return "Win32" end
+    if arch == "x86_64" then return "x64" end
+    if arch == "arm64ec" then return "ARM64EC" end
+    if arch:startswith("arm64") then return "ARM64" end
+    if arch:startswith("arm") then return "ARM" end
     return arch
 end
 
@@ -288,6 +289,23 @@ function _get_cmake_version()
     return cmake_version
 end
 
+function _get_cmake_system_processor(package)
+    -- on Windows, CMAKE_SYSTEM_PROCESSOR comes from PROCESSOR_ARCHITECTURE
+    -- on other systems it's the output of uname -m
+    if package:is_plat("windows") then
+        local archs = {
+            x86 = "x86",
+            x64 = "AMD64",
+            x86_64 = "AMD64",
+            arm = "ARM",
+            arm64 = "ARM64",
+            arm64ec = "ARM64EC"
+        }
+        return archs[package:arch()] or package:arch()
+    end
+    return package:arch()
+end
+
 -- insert configs from envs
 function _insert_configs_from_envs(configs, envs, opt)
     opt = opt or {}
@@ -340,6 +358,8 @@ function _get_configs_for_windows(package, configs, opt)
             table.insert(configs, "Win32")
         elseif package:is_arch("arm64") then
             table.insert(configs, "ARM64")
+        elseif package:is_arch("arm64ec") then
+            table.insert(configs, "ARM64EC")
         elseif package:is_arch("arm.*") then
             table.insert(configs, "ARM")
         else
@@ -435,8 +455,9 @@ function _get_configs_for_appleos(package, configs, opt)
         if package:is_arch("x86_64", "i386") then
             envs.CMAKE_OSX_SYSROOT = "iphonesimulator"
         end
-    elseif package:is_plat("macosx") then
+    elseif package:is_cross() then
         envs.CMAKE_SYSTEM_NAME = "Darwin"
+        envs.CMAKE_SYSTEM_PROCESSOR = _get_cmake_system_processor(package)
     end
     envs.CMAKE_OSX_ARCHITECTURES = package:arch()
     envs.CMAKE_FIND_ROOT_PATH_MODE_PACKAGE   = "BOTH"
@@ -468,6 +489,7 @@ function _get_configs_for_mingw(package, configs, opt)
     envs.CMAKE_EXE_LINKER_FLAGS    = _get_ldflags(package, opt)
     envs.CMAKE_SHARED_LINKER_FLAGS = _get_shflags(package, opt)
     envs.CMAKE_SYSTEM_NAME         = "Windows"
+    envs.CMAKE_SYSTEM_PROCESSOR    = _get_cmake_system_processor(package)
     -- avoid find and add system include/library path
     -- @see https://github.com/xmake-io/xmake/issues/2037
     envs.CMAKE_FIND_ROOT_PATH      = sdkdir
@@ -552,7 +574,7 @@ function _get_configs_for_cross(package, configs, opt)
     envs.CMAKE_SHARED_LINKER_FLAGS = _get_shflags(package, opt)
     -- we don't need to set it as cross compilation if we just pass toolchain
     -- https://github.com/xmake-io/xmake/issues/2170
-    if not package:is_plat(os.subhost()) then
+    if package:is_cross() then
         local system_name = package:targetos() or "Linux"
         if system_name == "linux" then
             system_name = "Linux"
@@ -628,7 +650,7 @@ function _get_configs_for_host_toolchain(package, configs, opt)
     envs.CMAKE_SHARED_LINKER_FLAGS = _get_shflags(package, opt)
     -- we don't need to set it as cross compilation if we just pass toolchain
     -- https://github.com/xmake-io/xmake/issues/2170
-    if not package:is_plat(os.subhost()) then
+    if package:is_cross() then
         envs.CMAKE_SYSTEM_NAME     = "Linux"
     else
         if package:config("pic") ~= false then
@@ -1191,4 +1213,3 @@ function install(package, configs, opt)
     end
     os.cd(oldir)
 end
-
