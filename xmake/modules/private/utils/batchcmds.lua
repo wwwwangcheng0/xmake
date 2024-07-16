@@ -35,6 +35,7 @@ local batchcmds = batchcmds or object { _init = {"_TARGET", "_CMDS", "_DEPINFO",
 
 -- show text
 function _show(showtext, progress)
+    progress = type(progress) == "table" and progress:percent() or math.floor(progress)
     if option.get("verbose") then
         cprint(showtext)
     else

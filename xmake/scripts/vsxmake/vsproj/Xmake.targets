@@ -110,7 +110,7 @@
       <File Include="$([MSBuild]::MakeRelative('$(XmakeProjectDirResolved)', $([System.IO.Path]::GetFullPath('%(SelectedFile.Identity)'))))" />
     </ItemGroup>
     <PropertyGroup>
-      <FileFlag>--files="@(File)"</FileFlag>
+      <FileFlag>--shallow --files="@(File)"</FileFlag>
     </PropertyGroup>
     <Message Text="$xmake build $(_XmakeCommonFlags) $(_XmakeBuildFileFlags) $(FileFlag) $(_XmakeTarget)" Importance="High" />
     <Exec Command="$(_XmakeEnv)

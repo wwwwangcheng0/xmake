@@ -112,6 +112,8 @@ function main(depsdata)
     if depsdata then
         data = depsdata.Data
     end
+
+    local includes = nil
     if data then
         includes = data.Includes
         for _, item in ipairs(data.ImportedModules) do
@@ -130,15 +132,6 @@ function main(depsdata)
         end
     end
 
-    -- translate it
-    local results = hashset.new()
-    local projectdir = os.projectdir():lower() -- we need to generate lower string, because json values are all lower
-    for _, includefile in ipairs(includes) do
-        includefile = _normailize_dep(includefile, projectdir)
-        if includefile then
-            results:insert(includefile)
-        end
-    end
-    return results:to_array()
+    return includes
 end
 

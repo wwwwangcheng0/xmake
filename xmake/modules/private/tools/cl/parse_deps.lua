@@ -81,16 +81,16 @@ end
 
 -- parse depsfiles from string
 function main(depsdata)
-    local results = hashset.new()
+    local results = {}
     for _, line in ipairs(depsdata:split("\n", {plain = true})) do
-        local includefile = parse_include(line:trim())
+        local includefile = parse_include(line)
         if includefile then
-            includefile = _normailize_dep(includefile, os.projectdir())
+            --includefile = _normailize_dep(includefile, os.projectdir())
             if includefile then
-                results:insert(includefile)
+                table.insert(results, includefile)
             end
         end
     end
-    return results:to_array()
+    return results
 end
 

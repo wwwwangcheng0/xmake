@@ -150,7 +150,7 @@ end
 -- make the warning flag
 function nf_warnings(self, levels)
     local flags = {}
-    local values = hashset.from(levels)
+    local values = hashset.from(table.wrap(levels))
     if values:has("all") and values:has("extra") then
         table.insert(flags, "-W4")
         values:remove("all")
@@ -250,8 +250,8 @@ function nf_language(self, stdname)
     if _g.cxxmaps == nil then
         _g.cxxmaps =
         {
-            cxx11       = "-std:c++11"
-        ,   gnuxx11     = "-std:c++11"
+            cxx11       = ""
+        ,   gnuxx11     = ""
         ,   cxx14       = "-std:c++14"
         ,   gnuxx14     = "-std:c++14"
         ,   cxx17       = "-std:c++17"

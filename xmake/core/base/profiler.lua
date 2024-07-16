@@ -153,9 +153,39 @@ function profiler._tracing_handler(hooktype)
     end
 end
 
+-- the flamegraph handler
+function profiler._flamegraph_handler(hooktype)
+    local newtime = os.clock()
+    if not _TRACETIME then
+        _TRACETIME = newtime
+    end
+    if newtime - _TRACETIME > 0.01 then
+        _TRACETIME = newtime
+    else
+        return
+    end
+
+    local level = 2
+    local backtraces = {}
+    while( true )
+    do
+        local funcinfo = debug.getinfo(level, 'nS')
+        if funcinfo then
+            table.insert(backtraces, string.format("%s:%s:%d",funcinfo.name,funcinfo.short_src,funcinfo.linedefined or 0))
+            level = level + 1
+        else
+            break
+        end
+    end
+    backtraces = table.reverse(backtraces)
+    print(table.concat(backtraces, ";").." "..newtime)
+end
+
 -- start profiling
 function profiler:start()
-    if self:is_trace() then
+    if self:is_flamegraph() then
+        debug.sethook(profiler._flamegraph_handler, 'cr', 0)
+    elseif self:is_trace() then
         debug.sethook(profiler._tracing_handler, 'cr', 0)
     elseif self:is_perf("call") then
         self._REPORTS        = self._REPORTS or {}
@@ -167,7 +197,7 @@ end
 
 -- stop profiling
 function profiler:stop()
-    if self:is_trace() then
+    if self:is_trace() or self:is_flamegraph() then
         debug.sethook()
     elseif self:is_perf("call") then
         self._STOPTIME = os.clock()
@@ -271,9 +301,15 @@ function profiler:is_perf(name)
     end
 end
 
+-- is flamegraph?
+function profiler:is_flamegraph()
+    local mode = self:mode()
+    return mode and mode == "flamegraph"
+end
+
 -- profiler is enabled?
 function profiler:enabled()
-    return self:is_perf("call") or self:is_perf("tag") or self:is_trace()
+    return self:is_perf("call") or self:is_perf("tag") or self:is_trace() or self:is_flamegraph()
 end
 
 -- return module

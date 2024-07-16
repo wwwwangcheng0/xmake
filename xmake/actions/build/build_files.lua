@@ -104,10 +104,12 @@ function _add_batchjobs_for_target_and_deps(batchjobs, rootjob, jobrefs, target,
         batchjobs:add(targetjob_ref, rootjob)
     else
         local targetjob, targetjob_root = _add_batchjobs_for_target(batchjobs, rootjob, target, filepatterns)
-        if targetjob and targetjob_root then
-            jobrefs[target:name()] = targetjob_root
-            for _, depname in ipairs(target:get("deps")) do
-                _add_batchjobs_for_target_and_deps(batchjobs, targetjob, jobrefs, project.target(depname), filepatterns)
+        if not option.get("shallow") then
+            if targetjob and targetjob_root then
+                jobrefs[target:name()] = targetjob_root
+                for _, depname in ipairs(target:get("deps")) do
+                    _add_batchjobs_for_target_and_deps(batchjobs, targetjob, jobrefs, project.target(depname), filepatterns)
+                end
             end
         end
     end

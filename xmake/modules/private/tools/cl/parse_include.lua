@@ -76,13 +76,14 @@ function get_include_notes()
         local note = probe_include_note_from_cl()
         if note then
             table.insert(notes, note)
-        end
-        table.join2(notes, {
+        else
+            table.join2(notes, {
             "Note: including file: ", -- en
             "注意: 包含文件: ", -- zh
             "Remarque : inclusion du fichier : ", -- fr
             "メモ: インクルード ファイル: " -- jp
         })
+        end
         _g.notes = notes
     end
     return notes
@@ -90,12 +91,29 @@ end
 
 -- main entry
 function main(line)
+--     local notes = get_include_notes()
+--     for idx, note in ipairs(notes) do
+--         if line:startswith(note) then
+--             -- optimization: move this note to head
+--             if idx ~= 1 then
+--                 table.insert(notes, 1, note)
+--             end
+--             return line:sub(#note):trim()
+--         end
+--     end
+
     local notes = get_include_notes()
+    if #notes == 1 then
+        local note = notes[1]
+        if line:startswith(note) then
+            return line:sub(#note):trim()
+        end
+        return
+    end
     for idx, note in ipairs(notes) do
         if line:startswith(note) then
-            -- optimization: move this note to head
             if idx ~= 1 then
-                table.insert(notes, 1, note)
+                notes = {note}
             end
             return line:sub(#note):trim()
         end

@@ -168,7 +168,7 @@ function filter:handle(value)
     assert(type(value) == "string")
 
     -- escape "%$", "%(", "%)", "%%" to "\001", "\002", "\003", "\004"
-    value = value:gsub("%%([%$%(%)%%])", function (ch) return escape_table1[ch] end)
+    value, nEscape = value:gsub("%%([%$%(%)%%])", function (ch) return escape_table1[ch] end)
 
     -- filter the builtin variables
     local values = {}
@@ -185,7 +185,10 @@ function filter:handle(value)
     value = value:gsub("%$%((.-)%)", function (variable)
         return values[variable]
     end)
-    return value:gsub("[\001\002\003\004]", function (ch) return escape_table2[ch] end)
+    if nEscape > 0 then
+        value = value:gsub("[\001\002\003\004]", function (ch) return escape_table2[ch] end)
+    end
+    return value
 end
 
 -- return module: filter

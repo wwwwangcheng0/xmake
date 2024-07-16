@@ -358,7 +358,11 @@ function _add_build_for_target(ninjafile, target, outputdir)
         ninjafile:print(" || $")
         ninjafile:write("  ")
         for _, dep in ipairs(deps) do
-            ninjafile:write(" " .. _get_relative_unix_path(project.target(dep):targetfile(), outputdir))
+            if project.target(dep):targetfile() then
+                ninjafile:write(" " .. _get_relative_unix_path(project.target(dep):targetfile(), outputdir))
+            else
+                ninjafile:write(" " .. project.target(dep):name())
+            end
         end
     end
     ninjafile:print("")

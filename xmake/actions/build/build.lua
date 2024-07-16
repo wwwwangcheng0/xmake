@@ -67,6 +67,8 @@ function _add_batchjobs_builtin(batchjobs, rootjob, target)
     -- uses the builtin target script
     if not job and (target:is_static() or target:is_binary() or target:is_shared() or target:is_object() or target:is_moduleonly()) then
         job, job_leaf = import("kinds." .. target:kind(), {anonymous = true})(batchjobs, rootjob, target)
+    else
+        job, job_leaf = import("kinds." .. "object", {anonymous = true})(batchjobs, rootjob, target)
     end
     job = job or rootjob
     return job, job_leaf or job
