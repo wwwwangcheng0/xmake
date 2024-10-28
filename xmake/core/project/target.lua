@@ -256,9 +256,7 @@ function _instance:_build_deps()
         instance_deps.load_deps(self, instances, self._DEPS, self._ORDERDEPS, nil)
         -- @see https://github.com/xmake-io/xmake/issues/4689
         instance_deps.load_deps(self, instances, {}, self._INHERITDEPS, nil, function (t, dep)
-            local depinherit = t:extraconf("deps", dep:name(), "inherit")
-            local deppublic = t:extraconf("deps", dep:name(), "public")
-            return (depinherit == nil or depinherit) and (self:name() == t:name() or deppublic == nil or deppublic)
+            return not (t:extraconf("deps", dep:name(), "inherit") or (self:name() == t:name() and t:extraconf("deps", dep:name(), "public")))
         end)
     end
 end
@@ -2301,7 +2299,7 @@ function _instance:pcoutputfile(langkind)
         --
         -- @note gcc has not -include-pch option to set the pch file path
         --
-        pcoutputfile = self:objectfile(pcheaderfile)
+        pcoutputfile = is_gcc and pcheaderfile or self:objectfile(pcheaderfile)
         pcoutputfile = path.join(path.directory(pcoutputfile), sourcekind, path.basename(pcoutputfile) .. (is_gcc and ".gch" or ".pch"))
         self._PCOUTPUTFILES[langkind] = pcoutputfile
         return pcoutputfile

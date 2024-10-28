@@ -98,6 +98,7 @@ function _do_build_file(target, sourcefile, opt)
         local build_pch
         local pcxxoutputfile = target:pcoutputfile("cxx")
         local pcoutputfile = target:pcoutputfile("c")
+        local extradepsfiles = target:values("extradepsfiles")
         if pcxxoutputfile or pcoutputfile then
             -- https://github.com/xmake-io/xmake/issues/3988
             local extension = path.extension(sourcefile)
@@ -110,6 +111,9 @@ function _do_build_file(target, sourcefile, opt)
         end
         if target:has_sourcekind("cc") and pcoutputfile and not build_pch then
             table.insert(dependinfo.files, pcoutputfile)
+        end
+        if extradepsfiles then
+            table.insert(dependinfo.files, extradepsfiles)
         end
         depend.save(dependinfo, dependfile)
     end

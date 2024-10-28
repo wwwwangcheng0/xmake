@@ -478,7 +478,7 @@ function nf_pcheader(self, pcheaderfile, opt)
         if self:name() == "clang" then
             return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
         else
-            return {"-include", path.filename(pcheaderfile), "-I", path.directory(pcoutputfile)}
+            return {"-include", target:pcheaderfile("c")}
         end
     end
 end
@@ -491,7 +491,7 @@ function nf_pcxxheader(self, pcheaderfile, opt)
         if self:name() == "clang" then
             return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
         else
-            return {"-include", path.filename(pcheaderfile), "-I", path.directory(pcoutputfile)}
+            return {"-include", target:pcheaderfile("cxx")}
         end
     end
 end
@@ -504,7 +504,7 @@ function nf_pmheader(self, pcheaderfile, opt)
         if self:name() == "clang" then
             return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
         else
-            return {"-include", path.filename(pcheaderfile), "-I", path.directory(pcoutputfile)}
+            return {"-include", target:pcheaderfile("m")}
         end
     end
 end
@@ -517,7 +517,7 @@ function nf_pmxxheader(self, pcheaderfile, opt)
         if self:name() == "clang" then
             return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
         else
-            return {"-include", path.filename(pcheaderfile), "-I", path.directory(pcoutputfile)}
+            return {"-include", target:pcheaderfile("mxx")}
         end
     end
 end

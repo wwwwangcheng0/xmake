@@ -116,6 +116,10 @@ function main(depsdata)
     local includes = nil
     if data then
         includes = data.Includes
+        if data.PCH then
+            includes = includes or {}
+            table.insert(includes, data.PCH)
+        end
         for _, item in ipairs(data.ImportedModules) do
             local bmifile = item.BMI
             if bmifile then

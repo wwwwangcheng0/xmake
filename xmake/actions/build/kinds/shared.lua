@@ -54,6 +54,7 @@ function _do_link_target(target, opt)
         end
 
     end, {dependfile = target:dependfile(),
+          lastmtime = os.mtime(target:targetfile()),
           changed = target:is_rebuilt(),
           values = depvalues, files = depfiles, dryrun = dryrun})
 end

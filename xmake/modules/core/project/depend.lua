@@ -209,7 +209,13 @@ function on_changed(callback, opt)
 
     -- @note we use mtime(dependfile) instead of mtime(objectfile) to ensure the object file is is fully compiled.
     -- @see https://github.com/xmake-io/xmake/issues/748
-    if not is_changed(dependinfo, {lastmtime = opt.lastmtime or os.mtime(dependfile), values = opt.values, files = opt.files}) then
+    local mtime = 0
+    if opt.lastmtime then
+        mtime = math.min(opt.lastmtime, os.mtime(dependfile))
+    else
+        mtime = os.mtime(dependfile)
+    end
+    if not is_changed(dependinfo, {lastmtime = mtime, values = opt.values, files = opt.files}) then
         return
     end
 
