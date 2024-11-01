@@ -26,13 +26,21 @@ function config(target, langkind, opt)
     local pcheaderfile = target:pcheaderfile(langkind)
     if pcheaderfile then
         local headerfile = target:autogenfile(pcheaderfile)
+        headerfile = path.join(path.directory(headerfile), langkind, path.filename(headerfile))
         if target:is_plat("windows") or target:is_plat("linux") and
             target:has_tool(langkind == "cxx" and "cxx" or "cc", "cl", "clang_cl", "gcc", "gxx") then
              -- fix `#pragma once` for msvc
              -- https://github.com/xmake-io/xmake/issues/2667
              if not os.isfile(headerfile) then
                 io.writefile(headerfile, ([[
+#ifdef _MSC_VER
+#if _MSC_VER >= 1929
 #pragma system_header
+#endif
+#endif
+#ifdef __GNUC__
+#pragma GCC system_header
+#endif
 #ifdef __cplusplus
 #include "%s"
 #endif // __cplusplus
