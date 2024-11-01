@@ -42,10 +42,11 @@ function menu_options()
                                        "    - xrepo install -f \"regex=true,thread=true\" boost"},
         {'j', "jobs",          "kv", tostring(os.default_njob()),
                                           "Set the number of parallel compilation jobs."},
-        {nil, "linkjobs",      "kv", nil,    "Set the number of parallel link jobs."},
+        {nil, "linkjobs",      "kv", nil, "Set the number of parallel link jobs."},
         {nil, "includes",      "kv", nil, "Includes extra lua configuration files.",
                                        "e.g.",
                                        "    - xrepo install -p cross --toolchain=mytool --includes='toolchain1.lua" .. path.envsep() .. "toolchain2.lua'"},
+        {nil, "policies",      "kv", nil, "Set the policies."                },
         {category = "Visual Studio SDK Configuration"                        },
         {nil, "vs",            "kv", nil, "The Microsoft Visual Studio"
                                         , "  e.g. --vs=2017"                 },
@@ -69,6 +70,7 @@ function menu_options()
         {category = "Cross Compilation Configuration"                        },
         {nil, "sdk",           "kv", nil, "Set the SDK directory of cross toolchain." },
         {nil, "toolchain",     "kv", nil, "Set the toolchain name."          },
+        {nil, "toolchain_host","kv", nil, "Set the host toolchain name."     },
         {category = "MingW Configuration"                                    },
         {nil, "mingw",         "kv", nil, "Set the MingW SDK directory."     },
         {category = "XCode SDK Configuration"                                },
@@ -178,6 +180,10 @@ function _install_packages(packages)
         table.insert(config_argv, "-k")
         table.insert(config_argv, kind)
     end
+    local policies = option.get("policies")
+    if policies then
+        table.insert(config_argv, "--policies=" .. policies)
+    end
     -- for android
     if option.get("ndk") then
         table.insert(config_argv, "--ndk=" .. option.get("ndk"))
@@ -203,6 +209,9 @@ function _install_packages(packages)
     end
     if option.get("toolchain") then
         table.insert(config_argv, "--toolchain=" .. option.get("toolchain"))
+    end
+    if option.get("toolchain_host") then
+        table.insert(config_argv, "--toolchain_host=" .. option.get("toolchain_host"))
     end
     -- for mingw
     if option.get("mingw") then

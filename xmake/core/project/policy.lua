@@ -68,10 +68,14 @@ function policy.policies()
             ["build.sanitizer.leak"]              = {description = "Enable leak sanitizer for c/c++ building.", type = "boolean"},
             -- Enable undefined sanitizer for c/c++ building.
             ["build.sanitizer.undefined"]         = {description = "Enable undefined sanitizer for c/c++ building.", type = "boolean"},
+            -- Enable build rpath
+            ["build.rpath"]                       = {description = "Enable build rpath.", default = true, type = "boolean"},
             -- Enable C++ modules for C++ building, even if no .mpp is involved in the compilation
             ["build.c++.modules"]                 = {description = "Enable C++ modules for C++ building.", type = "boolean"},
             -- Enable std module
             ["build.c++.modules.std"]             = {description = "Enable std modules.", default = true, type = "boolean"},
+            -- Enable unreferenced and non-public named module culling
+            ["build.c++.modules.culling"]         = {description = "Enable unrefereced and non-public named module culling.", default = true, type = "boolean"},
             -- Try to reuse compiled module bmi file if targets flags permit it
             ["build.c++.modules.tryreuse"]        = {description = "Try to reuse compiled module if possible.", default = true, type = "boolean"},
             -- Enable module taking defines acbount for bmi reuse discrimination
@@ -80,6 +84,8 @@ function policy.policies()
             ["build.c++.clang.fallbackscanner"]   = {description = "Force clang fallback module dependency scanner.", default = false, type = "boolean"},
             -- Force C++ modules fallback dependency scanner for msvc
             ["build.c++.msvc.fallbackscanner"]    = {description = "Force msvc fallback module dependency scanner.", default = false, type = "boolean"},
+            -- Set the default vs runtime, e.g. MT, MD
+            ["build.c++.msvc.runtime"]            = {description = "Set the default vs runtime.", type = "string", values = {"MT", "MD"}},
             -- Force C++ modules fallback dependency scanner for gcc
             ["build.c++.gcc.fallbackscanner"]     = {description = "Force gcc fallback module dependency scanner.", default = false, type = "boolean"},
             -- Force to enable new cxx11 abi in C++ modules for gcc
@@ -94,6 +100,10 @@ function policy.policies()
             ["windows.manifest.uac.ui"]           = {description = "Enable windows manifest UAC.", type = "boolean"},
             -- Automatically build before running
             ["run.autobuild"]                     = {description = "Automatically build before running.", type = "boolean"},
+            -- Enable install rpath
+            ["install.rpath"]                     = {description = "Enable install rpath.", default = true, type = "boolean"},
+            -- Strip package libraries for installation
+            ["install.strip_packagelibs"]         = {description = "Strip package libraries for installation.", default = true, type = "boolean"},
             -- Preprocessor configuration for ccache/distcc, we can disable linemarkers to speed up preprocess
             ["preprocessor.linemarkers"]          = {description = "Enable linemarkers for preprocessor.", default = true, type = "boolean"},
             -- Preprocessor configuration for ccache/distcc, we can disable it to avoid cache object file with __DATE__, __TIME__
@@ -131,6 +141,8 @@ function policy.policies()
             ["package.xmake.pass_depconfs"]       = {description = "Automatically passes dependency configuration for inner xmake package", default = true, type = "boolean"},
             -- It will force cmake package use ninja for build
             ["package.cmake_generator.ninja"]     = {description = "Set cmake package use ninja for build", default = false, type = "boolean"},
+            -- Enable msbuild MultiToolTask
+            ["package.msbuild.multi_tool_task"]   = {description = "Enable msbuild MultiToolTask.", default = false, type = "boolean"},
             -- Stop to test on the first failure
             ["test.stop_on_first_failure"]        = {description = "Stop to test on the first failure", default = false, type = "boolean"},
             -- Return zero as exit code on failure
@@ -139,11 +151,23 @@ function policy.policies()
             ["diagnosis.check_build_deps"]        = {description = "Show diagnosis info for checking build dependencies", default = false, type = "boolean"},
             -- Set the network mode, e.g. public/private
             --   private: it will disable fetch remote package repositories
-            ["network.mode"]                      = {description = "Set the network mode", type = "string"}
+            ["network.mode"]                      = {description = "Set the network mode", type = "string"},
+            -- Set the compatibility version, e.g. 2.0, 3.0
+            ["compatibility.version"]             = {description = "Set the compatibility version", type = "string", values = {"2.0", "3.0"}}
         }
         policy._POLICIES = policies
     end
     return policies
+end
+
+-- set policy default value
+function policy.set_default(name, value)
+    local defined_policy = policy.policies()[name]
+    if defined_policy then
+        defined_policy.default = value
+    else
+        os.raise("unknown policy(%s)!", name)
+    end
 end
 
 -- check policy value
@@ -155,7 +179,25 @@ function policy.check(name, value)
         else
             local valtype = type(value)
             if valtype ~= defined_policy.type then
-                utils.warning("policy(%s): invalid value type(%s), it shound be '%s'!", name, valtype, defined_policy.type)
+                utils.warning("policy(%s): invalid value type(%s), it shound be '%s'!",
+                    name, valtype, defined_policy.type)
+            end
+            if defined_policy.values then
+                local found = false
+                for _, policy_value in ipairs(defined_policy.values) do
+                    if tostring(value) == tostring(policy_value) then
+                        found = true
+                        break
+                    end
+                end
+                if not found then
+                    local values = {}
+                    for _, policy_value in ipairs(defined_policy.values) do
+                        table.insert(values, tostring(policy_value))
+                    end
+                    utils.warning("policy(%s): invalid value(%s), please set value from {%s}.",
+                        name, value, table.concat(values, ", "))
+                end
             end
         end
         return value

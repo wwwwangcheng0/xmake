@@ -83,7 +83,7 @@ end
 
 -- get unique tag
 function _get_unique_tag(content)
-    return hash.uuid(content):split("-", {plain = true})[1]:lower()
+    return hash.strhash32(content)
 end
 
 -- translate the file path
@@ -113,7 +113,7 @@ function _get_command_strings(package, cmd, opt)
             local dstname = path.filename(dstfile)
             local dstdir = path.normalize(path.directory(dstfile))
             table.insert(result, string.format("SetOutPath \"%s\"", dstdir))
-            table.insert(result, string.format("File /oname=%s \"%s\"", dstname, srcfile))
+            table.insert(result, string.format("File \"/oname=%s\" \"%s\"", dstname, srcfile))
         end
     elseif kind == "rm" then
         local filepath = _translate_filepath(package, cmd.filepath)
@@ -260,23 +260,35 @@ function _pack_nsis(makensis, package)
         os.cp(specfile_template, specfile)
     end
 
-    -- replace variables in specfile
+    -- replace variables in specfile,
+    -- and we need to avoid `attempt to yield across a C-call boundary` in io.gsub
     local specvars = _get_specvars(package)
     local pattern = package:extraconf("specfile", "pattern") or "%${([^\n]-)}"
+    local specvars_names = {}
+    local specvars_values = {}
+    io.gsub(specfile, "(" .. pattern .. ")", function(_, name)
+        table.insert(specvars_names, name)
+    end, {encoding = "ansi"})
+    for _, name in ipairs(specvars_names) do
+        name = name:trim()
+        if specvars_values[name] == nil then
+            local value = specvars[name]
+            if type(value) == "function" then
+                value = value()
+            end
+            if value ~= nil then
+                dprint("  > replace %s -> %s", name, value)
+            end
+            if type(value) == "table" then
+                dprint("invalid variable value", value)
+            end
+            specvars_values[name] = value
+        end
+    end
     io.gsub(specfile, "(" .. pattern .. ")", function(_, name)
         name = name:trim()
-        local value = specvars[name]
-        if type(value) == "function" then
-            value = value()
-        end
-        if value ~= nil then
-            dprint("  > replace %s -> %s", name, value)
-        end
-        if type(value) == "table" then
-            dprint("invalid variable value", value)
-        end
-        return value
-    end)
+        return specvars_values[name]
+    end, {encoding = "ansi"})
 
     -- make package
     os.vrunv(makensis, {specfile})

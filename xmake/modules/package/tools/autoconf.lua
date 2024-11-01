@@ -21,11 +21,10 @@
 -- imports
 import("core.base.option")
 import("core.project.config")
-import("core.tool.linker")
-import("core.tool.compiler")
 import("core.tool.toolchain")
 import("core.cache.memcache")
 import("lib.detect.find_tool")
+import("private.utils.toolchain", {alias = "toolchain_utils"})
 
 -- translate paths
 function _translate_paths(paths)
@@ -78,27 +77,6 @@ function _get_msvc_runenvs(package)
     return os.joinenvs(_get_msvc(package):runenvs())
 end
 
--- map compiler flags
-function _map_compflags(package, langkind, name, values)
-    return compiler.map_flags(langkind, name, values, {target = package})
-end
-
--- map linker flags
-function _map_linkflags(package, targetkind, sourcekinds, name, values)
-    return linker.map_flags(targetkind, sourcekinds, name, values, {target = package})
-end
-
--- is cross compilation?
-function _is_cross_compilation(package)
-    if not package:is_plat(os.subhost()) then
-        return true
-    end
-    if package:is_plat("macosx") and not package:is_arch(os.subarch()) then
-        return true
-    end
-    return false
-end
-
 -- get memcache
 function _memcache()
     return memcache.cache("package.tools.autoconf")
@@ -120,14 +98,11 @@ end
 
 -- get configs
 function _get_configs(package, configs)
-
-    -- add prefix
     local configs = configs or {}
     table.insert(configs, "--prefix=" .. _translate_paths(package:installdir()))
 
-    -- add host for cross-complation
-    if not configs.host and _is_cross_compilation(package) then
-        if package:is_plat("iphoneos", "macosx") then
+    if not configs.host then
+        if package:is_plat("iphoneos", "macosx") and package:is_cross() then
             local triples =
             {
                 arm64  = "aarch64-apple-darwin",
@@ -154,11 +129,26 @@ function _get_configs(package, configs)
                 mips64          = "mips64-linux-android"    -- removed in ndk r17
             }
             table.insert(configs, "--host=" .. (triples[package:arch()] or triples["armeabi-v7a"]))
-        elseif package:is_plat("mingw") then
+        elseif package:is_plat("mingw") then -- we always add host for mingw
             local triples =
             {
                 i386   = "i686-w64-mingw32",
                 x86_64 = "x86_64-w64-mingw32"
+            }
+            table.insert(configs, "--host=" .. (triples[package:arch()] or triples.i386))
+        elseif package:is_plat("linux") and package:is_cross() then
+            local triples =
+            {
+                ["arm64-v8a"] = "aarch64-linux-gnu",
+                arm64 = "aarch64-linux-gnu",
+                i386   = "i686-linux-gnu",
+                x86_64 = "x86_64-linux-gnu",
+                armv7 = "arm-linux-gnueabihf",
+                mips = "mips-linux-gnu",
+                mips64 = "mips64-linux-gnu",
+                mipsel = "mipsel-linux-gnu",
+                mips64el = "mips64el-linux-gnu",
+                loong64 = "loongarch64-linux-gnu"
             }
             table.insert(configs, "--host=" .. (triples[package:arch()] or triples.i386))
         elseif package:is_plat("cross") and package:targetos() then
@@ -181,16 +171,31 @@ end
 
 -- get cflags from package deps
 function _get_cflags_from_packagedeps(package, opt)
-    local result = {}
+    local values
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) ~= "string" and depname or package:dep(depname)
+        local dep = type(depname) ~= "string" and depname or package:librarydep(depname)
         if dep then
-            local fetchinfo = dep:fetch({external = false})
+            local fetchinfo = dep:fetch()
             if fetchinfo then
-                table.join2(result, _map_compflags(package, "cxx", "define", fetchinfo.defines))
-                table.join2(result, _translate_paths(_map_compflags(package, "cxx", "includedir", fetchinfo.includedirs)))
-                table.join2(result, _translate_paths(_map_compflags(package, "cxx", "sysincludedir", fetchinfo.sysincludedirs)))
+                if values then
+                    values = values .. fetchinfo
+                else
+                    values = fetchinfo
+                end
             end
+        end
+    end
+    -- @see https://github.com/xmake-io/xmake-repo/pull/4973#issuecomment-2295890196
+    local result = {}
+    if values then
+        if values.defines then
+            table.join2(result, toolchain_utils.map_compflags_for_package(package, "cxx", "define", values.defines))
+        end
+        if values.includedirs then
+            table.join2(result, _translate_paths(toolchain_utils.map_compflags_for_package(package, "cxx", "includedir", values.includedirs)))
+        end
+        if values.sysincludedirs then
+            table.join2(result, _translate_paths(toolchain_utils.map_compflags_for_package(package, "cxx", "sysincludedir", values.sysincludedirs)))
         end
     end
     return result
@@ -198,17 +203,33 @@ end
 
 -- get ldflags from package deps
 function _get_ldflags_from_packagedeps(package, opt)
-    local result = {}
+    local values
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) ~= "string" and depname or package:dep(depname)
+        local dep = type(depname) ~= "string" and depname or package:librarydep(depname)
         if dep then
-            local fetchinfo = dep:fetch({external = false})
+            local fetchinfo = dep:fetch()
             if fetchinfo then
-                table.join2(result, _translate_paths(_map_linkflags(package, "binary", {"cxx"}, "linkdir", fetchinfo.linkdirs)))
-                table.join2(result, _map_linkflags(package, "binary", {"cxx"}, "link", fetchinfo.links))
-                table.join2(result, _translate_paths(_map_linkflags(package, "binary", {"cxx"}, "syslink", fetchinfo.syslinks)))
-                table.join2(result, _map_linkflags(package, "binary", {"cxx"}, "framework", fetchinfo.frameworks))
+                if values then
+                    values = values .. fetchinfo
+                else
+                    values = fetchinfo
+                end
             end
+        end
+    end
+    local result = {}
+    if values then
+        if values.linkdirs then
+            table.join2(result, _translate_paths(toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "linkdir", values.linkdirs)))
+        end
+        if values.links then
+            table.join2(result, toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "link", values.links))
+        end
+        if values.syslinks then
+            table.join2(result, _translate_paths(toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "syslink", values.syslinks)))
+        end
+        if values.frameworks then
+            table.join2(result, toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "framework", values.frameworks))
         end
     end
     return result
@@ -220,7 +241,7 @@ function buildenvs(package, opt)
     local envs = {}
     local cross = false
     local cflags, cxxflags, cppflags, asflags, ldflags, shflags, arflags
-    if not _is_cross_compilation(package) and not package:config("toolchains") then
+    if not package:is_cross() and not package:config("toolchains") then
         cppflags = {}
         cflags   = table.join(table.wrap(package:config("cxflags")), package:config("cflags"))
         cxxflags = table.join(table.wrap(package:config("cxflags")), package:config("cxxflags"))
@@ -275,21 +296,21 @@ function buildenvs(package, opt)
         table.join2(cxxflags, _get_cflags_from_packagedeps(package, opt))
         table.join2(cppflags, _get_cflags_from_packagedeps(package, opt))
         table.join2(ldflags,  _get_ldflags_from_packagedeps(package, opt))
-        table.join2(cflags,   _map_compflags(package, "c", "define", defines))
-        table.join2(cflags,   _map_compflags(package, "c", "includedir", includedirs))
-        table.join2(cflags,   _map_compflags(package, "c", "sysincludedir", sysincludedirs))
-        table.join2(asflags,  _map_compflags(package, "as", "define", defines))
-        table.join2(asflags,  _map_compflags(package, "as", "includedir", includedirs))
-        table.join2(asflags,  _map_compflags(package, "as", "sysincludedir", sysincludedirs))
-        table.join2(cxxflags, _map_compflags(package, "cxx", "define", defines))
-        table.join2(cxxflags, _map_compflags(package, "cxx", "includedir", includedirs))
-        table.join2(cxxflags, _map_compflags(package, "cxx", "sysincludedir", sysincludedirs))
-        table.join2(ldflags,  _map_linkflags(package, "binary", {"cxx"}, "link", links))
-        table.join2(ldflags,  _map_linkflags(package, "binary", {"cxx"}, "syslink", syslinks))
-        table.join2(ldflags,  _map_linkflags(package, "binary", {"cxx"}, "linkdir", linkdirs))
-        table.join2(shflags,  _map_linkflags(package, "shared", {"cxx"}, "link", links))
-        table.join2(shflags,  _map_linkflags(package, "shared", {"cxx"}, "syslink", syslinks))
-        table.join2(shflags,  _map_linkflags(package, "shared", {"cxx"}, "linkdir", linkdirs))
+        table.join2(cflags,   toolchain_utils.map_compflags_for_package(package, "c", "define", defines))
+        table.join2(cflags,   toolchain_utils.map_compflags_for_package(package, "c", "includedir", includedirs))
+        table.join2(cflags,   toolchain_utils.map_compflags_for_package(package, "c", "sysincludedir", sysincludedirs))
+        table.join2(asflags,  toolchain_utils.map_compflags_for_package(package, "as", "define", defines))
+        table.join2(asflags,  toolchain_utils.map_compflags_for_package(package, "as", "includedir", includedirs))
+        table.join2(asflags,  toolchain_utils.map_compflags_for_package(package, "as", "sysincludedir", sysincludedirs))
+        table.join2(cxxflags, toolchain_utils.map_compflags_for_package(package, "cxx", "define", defines))
+        table.join2(cxxflags, toolchain_utils.map_compflags_for_package(package, "cxx", "includedir", includedirs))
+        table.join2(cxxflags, toolchain_utils.map_compflags_for_package(package, "cxx", "sysincludedir", sysincludedirs))
+        table.join2(ldflags,  toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "link", links))
+        table.join2(ldflags,  toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "syslink", syslinks))
+        table.join2(ldflags,  toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "linkdir", linkdirs))
+        table.join2(shflags,  toolchain_utils.map_linkflags_for_package(package, "shared", {"cxx"}, "link", links))
+        table.join2(shflags,  toolchain_utils.map_linkflags_for_package(package, "shared", {"cxx"}, "syslink", syslinks))
+        table.join2(shflags,  toolchain_utils.map_linkflags_for_package(package, "shared", {"cxx"}, "linkdir", linkdirs))
         envs.CC        = package:build_getenv("cc")
         envs.AS        = package:build_getenv("as")
         envs.AR        = package:build_getenv("ar")
@@ -310,13 +331,9 @@ function buildenvs(package, opt)
     end
     local runtimes = package:runtimes()
     if runtimes then
-        local fake_target = {is_shared = function(_) return false end,
-                             sourcekinds = function(_) return "cxx" end}
-        table.join2(cxxflags, _map_compflags(fake_target, "cxx", "runtime", runtimes))
-        table.join2(ldflags, _map_linkflags(fake_target, "binary", {"cxx"}, "runtime", runtimes))
-        fake_target = {is_shared = function(_) return true end,
-                       sourcekinds = function(_) return "cxx" end}
-        table.join2(shflags, _map_linkflags(fake_target, "shared", {"cxx"}, "runtime", runtimes))
+        table.join2(cxxflags, toolchain_utils.map_compflags_for_package(package, "cxx", "runtime", runtimes))
+        table.join2(ldflags, toolchain_utils.map_linkflags_for_package(package, "binary", {"cxx"}, "runtime", runtimes))
+        table.join2(shflags, toolchain_utils.map_linkflags_for_package(package, "shared", {"cxx"}, "runtime", runtimes))
     end
     if package:config("asan") then
         table.join2(cflags, package:_generate_sanitizer_configs("address", "cc").cflags)

@@ -358,20 +358,33 @@ function nf_linkgroup(self, linkgroup, opt)
     local flags = {}
     local extra = opt.extra
     if extra and not self:is_plat("macosx", "windows", "mingw") then
-        local group = extra.group
+        local as_needed = extra.as_needed
         local whole = extra.whole
-        if group and whole then
-            -- https://github.com/xmake-io/xmake/issues/4308
-            table.join2(flags, "-Wl,--whole-archive", "-Wl,--start-group", linkflags, "-Wl,--end-group", "-Wl,--no-whole-archive")
-        elseif group then
-            table.join2(flags, "-Wl,--start-group", linkflags, "-Wl,--end-group")
-        elseif whole then
-            table.join2(flags, "-Wl,--whole-archive", linkflags, "-Wl,--no-whole-archive")
-        end
+        local group = extra.group
         local static = extra.static
+        local prefix_flags = {}
+        local suffix_flags = {}
         if static then
-            table.join2(flags, "-Wl,-Bstatic", linkflags, "-Wl,-Bdynamic")
+            table.insert(prefix_flags, "-Wl,-Bstatic")
+            table.insert(suffix_flags, 1, "-Wl,-Bdynamic")
         end
+        -- https://github.com/xmake-io/xmake/issues/5621
+        if as_needed then
+            table.insert(prefix_flags, "-Wl,--as-needed")
+            table.insert(suffix_flags, 1, "-Wl,--no-as-needed")
+        elseif as_needed == false then
+            table.insert(prefix_flags, "-Wl,--no-as-needed")
+            table.insert(suffix_flags, 1, "-Wl,--as-needed")
+        end
+        if whole then
+            table.insert(prefix_flags, "-Wl,--whole-archive")
+            table.insert(suffix_flags, 1, "-Wl,--no-whole-archive")
+        end
+        if group then
+            table.insert(prefix_flags, "-Wl,--start-group")
+            table.insert(suffix_flags, 1, "-Wl,--end-group")
+        end
+        table.join2(flags, prefix_flags, linkflags, suffix_flags)
     end
     if #flags == 0 then
         flags = linkflags
@@ -386,7 +399,14 @@ end
 
 -- make the rpathdir flag
 function nf_rpathdir(self, dir, opt)
+    if self:is_plat("windows", "mingw") then
+        return
+    end
     opt = opt or {}
+    local extra = opt.extra
+    if extra and extra.installonly then
+        return
+    end
     dir = path.translate(dir)
     if self:has_flags("-Wl,-rpath=" .. dir, "ldflags") then
         local flags = {"-Wl,-rpath=" .. (dir:gsub("@[%w_]+", function (name)
@@ -395,7 +415,6 @@ function nf_rpathdir(self, dir, opt)
         end))}
         -- add_rpathdirs("...", {runpath = false})
         -- https://github.com/xmake-io/xmake/issues/5109
-        local extra = opt.extra
         if extra then
             if extra.runpath == false and self:has_flags("-Wl,-rpath=" .. dir .. ",--disable-new-dtags", "ldflags") then
                 flags[1] = flags[1] .. ",--disable-new-dtags"
@@ -737,6 +756,12 @@ function _preprocess(program, argv, opt)
         table.insert(flags, "-fdirectives-only")
     end
 
+    -- suppress -Wgnu-line-marker warnings
+    -- @see https://github.com/xmake-io/xmake/issues/5737
+    if is_gcc or is_clang then
+        table.insert(flags, "-Wno-gnu-line-marker")
+    end
+
     -- do preprocess
     local cppinfo = try {function ()
         if is_host("windows") then
@@ -847,12 +872,9 @@ end
 
 -- compile the source file
 function compile(self, sourcefile, objectfile, dependinfo, flags, opt)
-
-    -- ensure the object directory
+    opt = opt or {}
     os.mkdir(path.directory(objectfile))
 
-    -- compile it
-    opt = opt or {}
     local depfile = dependinfo and os.tmpfile() or nil
     try
     {

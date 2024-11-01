@@ -222,8 +222,17 @@ end
 
 -- add flags from the target packages
 function builder:_add_flags_from_targetpkgs(flags, target)
+    local kind = self:kind()
     for _, flagkind in ipairs(self:_flagkinds()) do
-        local result = target:get_from(flagkind, "package::*")
+        -- attempt to add special lanugage flags from package first, e.g. gcldflags, dcarflags
+        -- @see https://github.com/xmake-io/xmake-repo/issues/5255
+        local result
+        if kind:endswith("ld") or kind:endswith("sh") then
+            result = target:get_from(kind .. "flags", "package::*")
+        end
+        if not result then
+            result = target:get_from(flagkind, "package::*")
+        end
         if result then
             for _, values in ipairs(table.wrap(result)) do
                 table.join2(flags, self:_mapflags(values, flagkind, target))
@@ -309,6 +318,9 @@ function builder:_add_flags_from_argument(flags, target, args)
             return values, extras
         end,
         toolchain = function (name)
+            if target and target.toolconfig then
+                return target:toolconfig(name)
+            end
             local plat, arch
             if target and target.plat then
                 plat = target:plat()

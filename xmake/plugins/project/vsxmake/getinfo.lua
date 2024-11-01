@@ -155,7 +155,7 @@ function _make_targetinfo(mode, arch, target)
         -- fix c++17 to cxx17 for Xmake.props
         targetinfo.languages = targetinfo.languages:replace("c++", "cxx", {plain = true})
     end
-    if target:is_phony() or target:is_headeronly() or target:is_moduleonly() then
+    if target:is_phony() or target:is_headeronly() or target:is_moduleonly() or target:is_object() then
         return targetinfo
     end
 
@@ -353,9 +353,6 @@ function _make_filter(filepath, target, vcxprojdir)
                                 filter = path.normalize(path.directory(fileitem))
                             end
                         end
-                        if filter and filter == '.' then
-                            filter = nil
-                        end
                         goto found_filter
                     end
                 end
@@ -374,9 +371,9 @@ function _make_filter(filepath, target, vcxprojdir)
         if filter then
             filter = _strip_dotdirs(filter)
         end
-        if filter and filter == '.' then
-            filter = nil
-        end
+    end
+    if filter and filter == '.' then
+        filter = nil
     end
     return filter
 end
@@ -391,6 +388,7 @@ function main(outputdir, vsinfo)
     -- init solution directory
     vsinfo.solution_dir = path.absolute(path.join(outputdir, "vsxmake" .. vsinfo.vstudio_version))
     vsinfo.programdir = _make_dirs(xmake.programdir())
+    vsinfo.programfile = xmake.programfile()
     vsinfo.projectdir = project.directory()
     vsinfo.sln_projectfile = path.relative(project.rootfile(), vsinfo.solution_dir)
     local projectfile = path.filename(project.rootfile())

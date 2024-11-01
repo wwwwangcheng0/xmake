@@ -32,6 +32,7 @@ local global                = require("base/global")
 local process               = require("base/process")
 local hashset               = require("base/hashset")
 local baseoption            = require("base/option")
+local semver                = require("base/semver")
 local deprecated            = require("base/deprecated")
 local interpreter           = require("base/interpreter")
 local instance_deps         = require("base/private/instance_deps")
@@ -500,8 +501,12 @@ function project._load_requires()
     requires_extra = requires_extra or {}
     for _, requirestr in ipairs(table.wrap(requires_str)) do
 
-        -- get the package name
+        -- get the package name, e.g. packagename[foo,bar] >1.0
         local packagename = requirestr:split("%s")[1]
+        local packagename_raw, _ = packagename:match("(.-)%[(.*)%]")
+        if packagename_raw and not packagename:find("::", 1, true) then
+            packagename = packagename_raw
+        end
 
         -- get alias and requireconfs
         local alias = nil
@@ -714,13 +719,6 @@ function project.interpreter()
             if type(result) == "function" then
                 result = result()
             end
-
-            -- attempt to get it from the platform tools, e.g. cc, cxx, ld ..
-            -- because these values may not exist in config cache when call `config.get()`, we need check and get it.
-            --
-            if not result then
-                result = platform.tool(variable)
-            end
         end
         return result
     end)
@@ -826,10 +824,33 @@ function project.version()
     return project.get("target.version")
 end
 
+-- init default policies
+-- @see https://github.com/xmake-io/xmake/issues/5527
+function project._init_default_policies()
+    local compatibility_version = project.policy("compatibility.version")
+    if compatibility_version then
+        if semver.compare(compatibility_version, "3.0") >= 0 then
+            policy.set_default("package.cmake_generator.ninja", true)
+            policy.set_default("build.c++.msvc.runtime", "MD")
+        else
+            policy.set_default("package.cmake_generator.ninja", false)
+            policy.set_default("build.c++.msvc.runtime", "MT")
+        end
+    end
+end
+
 -- get the project policy, the root policy of the target scope
 function project.policy(name)
     local policies = project._memcache():get("policies")
     if not policies then
+
+        -- init default policies
+        if name ~= "compatibility.version" then
+            if not project._DEFAULT_POLICIES_INITED then
+                project._init_default_policies()
+                project._DEFAULT_POLICIES_INITED = true
+            end
+        end
 
         -- get policies from project, e.g. set_policy("xxx", true)
         policies = project.get("target.policy")

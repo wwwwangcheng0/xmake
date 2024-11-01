@@ -122,12 +122,11 @@ function _get_requiresflags(target, module, opt)
     local name = module.name
     local cachekey = target:name() .. name
 
+    local requires, requires_changed = is_dependencies_changed(target, module)
     local requiresflags = compiler_support.memcache():get2(cachekey, "requiresflags")
-                       or compiler_support.localcache():get2(cachekey, "requiresflags")
-
-    if not requiresflags or (opt and opt.regenerate) then
+    if not requiresflags or requires_changed then
         requiresflags = {}
-        for required, _ in table.orderpairs(module.requires) do
+        for required in requires:orderitems() do
             local dep_module = get_from_target_mapper(target, required)
             assert(dep_module, "module dependency %s required for %s not found", required, name)
 
@@ -146,15 +145,16 @@ function _get_requiresflags(target, module, opt)
                 table.join2(requiresflags, deps)
             end
         end
-        compiler_support.memcache():set2(cachekey, "requiresflags", table.unique(requiresflags))
-        compiler_support.localcache():set2(cachekey, "requiresflags", table.unique(requiresflags))
+        requiresflags = table.unique(requiresflags)
+        compiler_support.memcache():set2(cachekey, "requiresflags", requiresflags)
+        compiler_support.memcache():set2(cachekey, "oldrequires", requires)
     end
     return requiresflags
 end
 
 function _append_requires_flags(target, module, name, cppfile, bmifile, opt)
     local cxxflags = {}
-    local requiresflags = _get_requiresflags(target, {name = (name or cppfile), bmi = bmifile, requires = module.requires}, {regenerate = opt.build})
+    local requiresflags = _get_requiresflags(target, {name = (name or cppfile), bmi = bmifile, requires = module.requires})
     for _, flag in ipairs(requiresflags) do
         -- we need to wrap flag to support flag with space
         if type(flag) == "string" and flag:find(" ", 1, true) then
@@ -207,11 +207,7 @@ function make_module_buildjobs(target, batchjobs, job_name, deps, opt)
         job = batchjobs:newjob(name or opt.cppfile, function(index, total, jobopt)
             local mapped_bmi
             if provide and compiler_support.memcache():get2(target:name() .. name, "reuse") then
-                if not target:is_binary() then
-                    return
-                else
-                    mapped_bmi = get_from_target_mapper(target, name).bmi
-                end
+                mapped_bmi = get_from_target_mapper(target, name).bmi
             end
 
             local build, dependinfo
@@ -248,24 +244,16 @@ function make_module_buildjobs(target, batchjobs, job_name, deps, opt)
                     local fileconfig = target:fileconfig(opt.cppfile)
                     local public = fileconfig and fileconfig.public
                     local external = fileconfig and fileconfig.external
-                    local private_dep = fileconfig and fileconfig.private_dep
+                    local from_moduleonly = external and external.moduleonly
                     local bmifile = mapped_bmi or bmifile
-                    if target:is_binary() then
-                        if mapped_bmi then
-                            progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.objectfile.$(mode) %s", target:name(), name or opt.cppfile)
-                            _compile_objectfile_step(target, bmifile, opt.cppfile, opt.objectfile)
-                        else
-                            progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
-                            _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat")})
-                        end
-                    else
-                        if (not public and not external) or (external and private_dep) then
-                            progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
-                            _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat")})
-                        else
+                    if external and not from_moduleonly then
+                        if not mapped_bmi then
                             progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.bmi.$(mode) %s", target:name(), name or opt.cppfile)
                             _compile_bmi_step(target, bmifile, opt.cppfile, {std = (name == "std" or name == "std.compat")})
                         end
+                    else
+                        progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
+                        _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat")})
                     end
                 else
                     os.tryrm(opt.objectfile) -- force rebuild for .cpp files
@@ -283,11 +271,7 @@ function make_module_buildcmds(target, batchcmds, opt)
 
     local mapped_bmi
     if provide and compiler_support.memcache():get2(target:name() .. name, "reuse") then
-        if not target:is_binary() then
-            return
-        else
-            mapped_bmi = get_from_target_mapper(target, name).bmi
-        end
+        mapped_bmi = get_from_target_mapper(target, name).bmi
     end
 
     -- append requires flags
@@ -302,24 +286,15 @@ function make_module_buildcmds(target, batchcmds, opt)
         local fileconfig = target:fileconfig(opt.cppfile)
         local public = fileconfig and fileconfig.public
         local external = fileconfig and fileconfig.external
-        local private_dep = fileconfig and fileconfig.private_dep
         local bmifile = mapped_bmi or bmifile
-        if target:is_binary() then
-            if mapped_bmi then
-                batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.objectfile.$(mode) %s", target:name(), name or opt.cppfile)
-                _compile_objectfile_step(target, bmifile, opt.cppfile, opt.objectfile, {batchcmds = batchcmds})
-            else
-                batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
-                _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
-            end
-        else
-            if (not public and not external) or (external and private_dep) then
-                batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
-                _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
-            else
+        if external and not from_moduleonly then
+            if not mapped_bmi then
                 batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.bmi.$(mode) %s", target:name(), name or opt.cppfile)
                 _compile_bmi_step(target, bmifile, opt.cppfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
             end
+        else
+            batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
+            _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
         end
     else
         batchcmds:rm(opt.objectfile) -- force rebuild for .cpp files
@@ -383,4 +358,3 @@ function get_requires(target, module)
     end
     return _requires
 end
-

@@ -2,11 +2,57 @@
 
 ## master (unreleased)
 
+## v2.9.6
+
+### New features
+
+* [#5527](https://github.com/xmake-io/xmake/issues/5527): Add `set_policy("compatibility.version", "3.0")` to preview v3.0 features.
+* [#5649](https://github.com/xmake-io/xmake/pull/5649): Add `package.check_fcsnippets`
+
+### Changes
+
+* [#5631](https://github.com/xmake-io/xmake/pull/5631): Add `as_needed` for `add_linkgroups`
+* [#5702](https://github.com/xmake-io/xmake/issues/5702): Improve hash module
+* [#5688](https://github.com/xmake-io/xmake/pull/5688): Improve hashset module
+* [#5711](https://github.com/xmake-io/xmake/issues/5711): Support to parse include deps for sdcc
+* [#5727](https://github.com/xmake-io/xmake/issues/5727): Improve configs for add_requires
+* [#5762](https://github.com/xmake-io/xmake/pull/5762): Improve bin2c speed
+
+### Bugs fixed
+
+* [#5645](https://github.com/xmake-io/xmake/issues/5645): Fix `xmake watch` for linux
+* [#5686](https://github.com/xmake-io/xmake/pull/5686): Fix module scanning
+
+## v2.9.5
+
+### New features
+
+* [#5462](https://github.com/xmake-io/xmake/pull/5462): Add `xmake l cli.bisect`
+* [#5488](https://github.com/xmake-io/xmake/pull/5488): Support for using cosmocc to build xmake binary
+* [#5491](https://github.com/xmake-io/xmake/pull/5491): Provide single xmake binary with embeded lua files
+* [#5580](https://github.com/xmake-io/xmake/issues/5580): Add `@builtin/xrepo` to add envs for `xrepo env shell`
+
+### Changes
+
+* [#5507](https://github.com/xmake-io/xmake/issues/5507): Use treeless to improve git.clone
+* [#5536](https://github.com/xmake-io/xmake/pull/5536): Add jar generate in swig mode
+* [#5573](https://github.com/xmake-io/xmake/issues/5573): Improve vsxmake generator performance
+* [#5601](https://github.com/xmake-io/xmake/issues/5601): Improve utils.symbols.export_all rule to filter sourcefile path
+
+### Bugs fixed
+
+* [#4750](https://github.com/xmake-io/xmake/issues/4750): Fix compile_commands generator for `xmake tests`
+* [#5465](https://github.com/xmake-io/xmake/pull/5465): Fix lock package requires
+* [#4760](https://github.com/xmake-io/xmake/issues/4760): Fix distcc client issue
+
+## v2.9.4
+
 ### New features
 
 * [#5278](https://github.com/xmake-io/xmake/issues/5278): Add `build.intermediate_directory` policy to disable and custom intermediate directory
 * [#5313](https://github.com/xmake-io/xmake/issues/5313): Add windows arm/arm64ec support
 * [#5296](https://github.com/xmake-io/xmake/issues/5296): Add Intel LLVM Fortran Compiler support
+* [#5384](https://github.com/xmake-io/xmake/issues/5384): Add `add_bindirs` for package
 
 ### Changes
 
@@ -14,6 +60,9 @@
 * [#5251](https://github.com/xmake-io/xmake/issues/5251): Update 7z/curl for windows installer
 * [#5286](https://github.com/xmake-io/xmake/issues/5286): Improve json to parse hex string
 * [#5302](https://github.com/xmake-io/xmake/pull/5302): Improve Vala support
+* [#5335](https://github.com/xmake-io/xmake/pull/5335): Improve `xmake install` and `xpack`, Add `set_prefixdir` api for target
+* [#5387](https://github.com/xmake-io/xmake/pull/5387): Improve `xmake test`
+* [#5376](https://github.com/xmake-io/xmake/pull/5376): Improve module objectfiles handling and moduleonly package
 
 ### Bugs Fixed
 
@@ -1848,11 +1897,57 @@
 
 ## master (开发中)
 
+## v2.9.6
+
+### 新特性
+
+* [#5527](https://github.com/xmake-io/xmake/issues/5527): 添加 `set_policy("compatibility.version", "3.0")` 提前预览体验 3.0 特性
+* [#5649](https://github.com/xmake-io/xmake/pull/5649): 添加 `package.check_fcsnippets`
+
+### 改进
+
+* [#5631](https://github.com/xmake-io/xmake/pull/5631): 为 `add_linkgroups` 添加 `as_needed`
+* [#5702](https://github.com/xmake-io/xmake/issues/5702): 改进 hash 模块
+* [#5688](https://github.com/xmake-io/xmake/pull/5688): 改进 hashset
+* [#5711](https://github.com/xmake-io/xmake/issues/5711): 为 sdcc 支持解析 include 依赖
+* [#5727](https://github.com/xmake-io/xmake/issues/5727): 为 add_requires 改进 configs 配置
+* [#5762](https://github.com/xmake-io/xmake/pull/5762): 改进 bin2c 速度
+
+### Bugs 修复
+
+* [#5645](https://github.com/xmake-io/xmake/issues/5645): 修复 `xmake watch` 在 linux 无法监听递归文件问题
+* [#5686](https://github.com/xmake-io/xmake/pull/5686): 修复模块扫描
+
+## v2.9.5
+
+### 新特性
+
+* [#5462](https://github.com/xmake-io/xmake/pull/5462): 添加 `xmake l cli.bisect`
+* [#5488](https://github.com/xmake-io/xmake/pull/5488): 支持使用 cosmocc 去构建 xmake 自身二进制
+* [#5491](https://github.com/xmake-io/xmake/pull/5491): 支持提供内嵌 lua 文件的单个 xmake 二进制文件
+* [#5580](https://github.com/xmake-io/xmake/issues/5580): 添加 `@builtin/xrepo` 辅助模块，为 `xrepo env shell` 实现快速设置环境变量
+
+### 改进
+
+* [#5507](https://github.com/xmake-io/xmake/issues/5507): 改进 git clone 下载速度
+* [#5536](https://github.com/xmake-io/xmake/pull/5536): 在 swig 模式中添加 jar 生成支持
+* [#5573](https://github.com/xmake-io/xmake/issues/5573): 改进 vsxmake generator 性能
+* [#5601](https://github.com/xmake-io/xmake/issues/5601): 改进 utils.symbols.export_all 规则去过滤源文件路径
+
+### Bugs 修复
+
+* [#4750](https://github.com/xmake-io/xmake/issues/4750): 修复 compile_commands 生成器，支持 `xmake tests`
+* [#5465](https://github.com/xmake-io/xmake/pull/5465): 修复 package requires lock
+* [#4760](https://github.com/xmake-io/xmake/issues/4760): 修复 distcc 分布式编译问题
+
+## v2.9.4
+
 ### 新特性
 
 * [#5278](https://github.com/xmake-io/xmake/issues/5278): 添加 `build.intermediate_directory` 策略去禁用中间目录生成
 * [#5313](https://github.com/xmake-io/xmake/issues/5313): 添加 windows arm/arm64ec 支持
 * [#5296](https://github.com/xmake-io/xmake/issues/5296): 添加 Intel LLVM Fortran 编译器支持
+* [#5384](https://github.com/xmake-io/xmake/issues/5384): 为包添加 `add_bindirs` 配置支持
 
 ### 改进
 
@@ -1860,6 +1955,9 @@
 * [#5251](https://github.com/xmake-io/xmake/issues/5251): 为 windows installer 更新内置的 7z/curl
 * [#5286](https://github.com/xmake-io/xmake/issues/5286): 改进 json 支持16进制解析
 * [#5302](https://github.com/xmake-io/xmake/pull/5302): 改进 Vala 支持
+* [#5335](https://github.com/xmake-io/xmake/pull/5335): 改进 `xmake install` 和 `xpack`，添加 `set_prefixdir` 接口
+* [#5387](https://github.com/xmake-io/xmake/pull/5387): 改进 `xmake test`
+* [#5376](https://github.com/xmake-io/xmake/pull/5376): 改进 C++ module 对象列表处理和 moduleonly 包支持
 
 ### Bugs 修复
 

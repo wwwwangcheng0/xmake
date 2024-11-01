@@ -975,7 +975,7 @@ function _instance:soname()
     if not self:is_shared() then
         return
     end
-    if not self:is_plat("macosx", "linux", "bsd", "cross") then
+    if self:is_plat("windows", "mingw", "cygwin", "msys") then
         return
     end
     local version = self:get("version")
@@ -1334,7 +1334,7 @@ function _instance:pkgenvs()
             end
         end
         for _, pkg in pkgs:orderkeys() do
-            local envs = pkg:get("envs")
+            local envs = pkg:envs()
             if envs then
                 for name, values in table.orderpairs(envs) do
                     if type(values) == "table" then
@@ -1495,7 +1495,7 @@ function _instance:autogenfile(sourcefile, opt)
         -- @see
         -- https://github.com/xmake-io/xmake/issues/3021
         -- https://github.com/xmake-io/xmake/issues/3715
-        relativedir = hash.uuid4(relativedir):gsub("%-", ""):lower()
+        relativedir = hash.strhash128(relativedir)
     end
     relativedir = relativedir:gsub("%.%.", "__")
     local rootdir = (opt and opt.rootdir) and opt.rootdir or self:autogendir()
@@ -1622,20 +1622,56 @@ function _instance:rundir()
     return baseoption.get("workdir") or self:get("rundir") or path.directory(self:targetfile())
 end
 
--- get install directory
-function _instance:installdir()
+-- get prefix directory
+function _instance:prefixdir()
+    return self:get("prefixdir")
+end
 
-    -- get it from the cache
+-- get the installed binary directory
+function _instance:bindir()
+    local bindir = self:extraconf("prefixdir", self:prefixdir(), "bindir")
+    if bindir == nil then
+        bindir = "bin"
+    end
+    return self:installdir(bindir)
+end
+
+-- get the installed library directory
+function _instance:libdir()
+    local libdir = self:extraconf("prefixdir", self:prefixdir(), "libdir")
+    if libdir == nil then
+        libdir = "lib"
+    end
+    return self:installdir(libdir)
+end
+
+-- get the installed include directory
+function _instance:includedir()
+    local includedir = self:extraconf("prefixdir", self:prefixdir(), "includedir")
+    if includedir == nil then
+        includedir = "include"
+    end
+    return self:installdir(includedir)
+end
+
+-- get install directory
+function _instance:installdir(...)
+    opt = opt or {}
     local installdir = baseoption.get("installdir")
     if not installdir then
-
         -- DESTDIR: be compatible with https://www.gnu.org/prep/standards/html_node/DESTDIR.html
         installdir = self:get("installdir") or os.getenv("INSTALLDIR") or os.getenv("PREFIX") or os.getenv("DESTDIR") or platform.get("installdir")
         if installdir then
             installdir = installdir:trim()
         end
     end
-    return installdir
+    if installdir then
+        local prefixdir = self:prefixdir()
+        if prefixdir then
+            installdir = path.join(installdir, prefixdir)
+        end
+        return path.normalize(path.join(installdir, ...))
+    end
 end
 
 -- get package directory
@@ -1662,7 +1698,7 @@ function _instance:filerules(sourcefile)
         if filerules then
             override = filerules.override
             for _, rulename in ipairs(table.wrap(filerules)) do
-                local r = target._project().rule(rulename) or rule.rule(rulename)
+                local r = target._project().rule(rulename) or rule.rule(rulename) or self:rule(rulename)
                 if r then
                     table.insert(rules, r)
                 end
@@ -1999,7 +2035,7 @@ end
 -- get the header files
 function _instance:headerfiles(outputdir, opt)
     opt = opt or {}
-    local headerfiles = self:get("headerfiles")
+    local headerfiles = self:get("headerfiles", opt) or {}
     -- add_headerfiles("src/*.h", {install = false})
     -- @see https://github.com/xmake-io/xmake/issues/2577
     if opt.installonly then
@@ -2015,13 +2051,12 @@ function _instance:headerfiles(outputdir, opt)
         return
     end
 
-    local headerdir = outputdir
-    if not headerdir then
-        if self:installdir() then
-            headerdir = path.join(self:installdir(), "include")
+    if not outputdir then
+        if self:includedir() then
+            outputdir = self:includedir()
         end
     end
-    return match_copyfiles(self, "headerfiles", headerdir, {copyfiles = headerfiles})
+    return match_copyfiles(self, "headerfiles", outputdir, {copyfiles = headerfiles})
 end
 
 -- get the configuration files
@@ -2035,8 +2070,9 @@ function _instance:configfiles(outputdir)
 end
 
 -- get the install files
-function _instance:installfiles(outputdir)
-    return match_copyfiles(self, "installfiles", outputdir or self:installdir())
+function _instance:installfiles(outputdir, opt)
+    local installfiles = self:get("installfiles", opt) or {}
+    return match_copyfiles(self, "installfiles", outputdir or self:installdir(), {copyfiles = installfiles})
 end
 
 -- get the extra files
@@ -2101,7 +2137,7 @@ function _instance:dependfile(objectfile)
         -- @see
         -- https://github.com/xmake-io/xmake/issues/3021
         -- https://github.com/xmake-io/xmake/issues/3715
-        relativedir = hash.uuid4(relativedir):gsub("%-", ""):lower()
+        relativedir = hash.strhash128(relativedir)
     end
 
     -- originfile: project/build/.objs/xxxx/../../xxx.c will be out of range for objectdir
@@ -2285,14 +2321,17 @@ function _instance:pcoutputfile(langkind)
     -- get the precompiled header file in the object directory
     local pcheaderfile = self:pcheaderfile(langkind)
     if pcheaderfile then
-
-        -- is gcc?
         local is_gcc = false
+        local is_msvc = false
         local sourcekinds = {c = "cc", cxx = "cxx", m = "mm", mxx = "mxx"}
         local sourcekind = assert(sourcekinds[langkind], "unknown language kind: " .. langkind)
         local _, toolname = self:tool(sourcekind)
-        if toolname and (toolname == "gcc" or toolname == "gxx") then
-            is_gcc = true
+        if toolname then
+            if toolname == "gcc" or toolname == "gxx" then
+                is_gcc = true
+            elseif toolname == "cl" then
+                is_msvc = true
+            end
         end
 
         -- make precompiled output file
@@ -2300,7 +2339,27 @@ function _instance:pcoutputfile(langkind)
         -- @note gcc has not -include-pch option to set the pch file path
         --
         pcoutputfile = is_gcc and pcheaderfile or self:objectfile(pcheaderfile)
-        pcoutputfile = path.join(path.directory(pcoutputfile), path.basename(pcoutputfile) .. (is_gcc and ".gch" or ".pch"))
+        local pcoutputfilename = path.basename(pcoutputfile)
+        if is_gcc then
+            pcoutputfilename = pcoutputfilename .. ".gch"
+        else
+            -- different vs versions of pch files are not backward compatible,
+            -- so we need to distinguish between them.
+            --
+            -- @see https://github.com/xmake-io/xmake/issues/5413
+            local msvc = self:toolchain("msvc")
+            if is_msvc and msvc then
+                local vs_toolset = msvc:config("vs_toolset")
+                if vs_toolset then
+                    vs_toolset = sandbox_module.import("private.utils.toolchain", {anonymous = true}).get_vs_toolset_ver(vs_toolset)
+                end
+                if vs_toolset then
+                    pcoutputfilename = pcoutputfilename .. "_" .. vs_toolset
+                end
+            end
+            pcoutputfilename = pcoutputfilename .. ".pch"
+        end
+        pcoutputfile = path.join(path.directory(pcoutputfile), sourcekind, pcoutputfilename)
         self._PCOUTPUTFILES[langkind] = pcoutputfile
         return pcoutputfile
     end
@@ -2736,6 +2795,7 @@ function target.apis()
         ,   "target.set_runargs"
         ,   "target.set_exceptions"
         ,   "target.set_encodings"
+        ,   "target.set_prefixdir"
             -- target.add_xxx
         ,   "target.add_deps"
         ,   "target.add_rules"
@@ -2886,8 +2946,13 @@ function target.linkname(filename, opt)
     if count > 0 and linkname then
         return linkname
     end
-    -- for custom shared libraries name, xxx.so, xxx.dylib
-    if not filename:startswith("lib") and (filename:endswith(".so") or filename:endswith(".dylib")) then
+    -- fallback to the generic unix library name, libxxx.a, libxxx.so, ..
+    if filename:startswith("lib") then
+        if filename:endswith(".a") or filename:endswith(".so") then
+            return path.basename(filename:sub(4))
+        end
+    elseif filename:endswith(".so") or filename:endswith(".dylib") then
+        -- for custom shared libraries name, xxx.so, xxx.dylib
         return filename
     end
     return nil

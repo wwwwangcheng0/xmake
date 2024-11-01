@@ -26,7 +26,7 @@ import("core.tool.compiler")
 import("core.project.depend")
 import("utils.progress")
 import("private.utils.batchcmds")
-import("object", {alias = "add_batchjobs_for_object"})
+import("object", {alias = "object_target"})
 import("linkdepfiles", {alias = "get_linkdepfiles"})
 
 -- do link target
@@ -54,7 +54,7 @@ function _do_link_target(target, opt)
         end
     end, {dependfile = target:dependfile(),
           lastmtime = os.mtime(target:targetfile()),
-          changed = target:is_rebuilt(),
+          changed = target:is_rebuilt() or option.get("linkonly"),
           values = depvalues, files = depfiles, dryrun = dryrun})
 end
 
@@ -143,6 +143,6 @@ function main(batchjobs, rootjob, target)
     --
     -- unless call set_policy("build.across_targets_in_parallel", false) to disable to build across targets in parallel.
     --
-    local job_objects = add_batchjobs_for_object(batchjobs, job_link, target)
+    local job_objects = object_target.add_batchjobs_for_object(batchjobs, job_link, target)
     return target:policy("build.across_targets_in_parallel") == false and job_objects or job_link, job_objects
 end

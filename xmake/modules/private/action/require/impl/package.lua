@@ -85,6 +85,11 @@ end
 --
 -- {build = true}: always build packages, we do not use the precompiled artifacts
 --
+-- simply configs as string:
+--   add_requires("boost[iostreams,system,thread,key=value] >=1.78.0")
+--   add_requires("boost[iostreams,thread=n] >=1.78.0")
+--   add_requires("libplist[shared,debug,codecs=[foo,bar,zoo]]")
+--
 function _parse_require(require_str)
 
     -- split package and version info
@@ -144,6 +149,38 @@ function _load_require(require_str, requires_extra, parentinfo)
         require_extra = requires_extra[require_str] or {}
     end
 
+    -- parse configs from package name, and we need to ignore 3rd package name, e.g. vcpkg::boost[core], ...
+    -- @see https://github.com/xmake-io/xmake/issues/5727#issuecomment-2421040107
+    --
+    -- e.g.
+    --   add_requires("boost[iostreams,system,thread,key=value] >=1.78.0")
+    --   add_requires("libplist[shared,debug,codecs=[foo,bar,zoo]]")
+    --
+    local packagename_raw, configs_str = packagename:match("(.-)%[(.*)%]")
+    if packagename_raw and configs_str and not packagename:find("::", 1, true) then
+        configs_str = configs_str:gsub("%[(.*)%]", function (w)
+            return w:replace(",", ":")
+        end)
+        packagename = packagename_raw
+        local splitinfo = configs_str:split(",", {plain = true})
+        for _, v in ipairs(splitinfo) do
+            local parts = v:split("=", {plain = true})
+            local k = parts[1]
+            v = parts[2]
+            require_extra.configs = require_extra.configs or {}
+            local configs = require_extra.configs
+            if v then
+                if v:find(":", 1 ,true) then
+                    configs[k] = v:split(":", {plain = true})
+                else
+                    configs[k] = option.boolean(v)
+                end
+            else
+                configs[k] = true
+            end
+        end
+    end
+
     -- get required building configurations
     -- we need to clone a new configs object, because the whole requireinfo will be modified later.
     -- @see https://github.com/xmake-io/xmake-repo/pull/2067
@@ -158,17 +195,6 @@ function _load_require(require_str, requires_extra, parentinfo)
         require_build_configs.runtimes = require_build_configs.vs_runtime
         require_build_configs.vs_runtime = nil
         wprint("add_requires(%s): vs_runtime is deprecated, please use runtimes!", require_str)
-    end
-
-    -- require packge in the current host platform
-    if require_extra.host then
-        if is_subhost(core_package.targetplat()) and os.subarch() == core_package.targetarch() then
-            -- we need to pass plat/arch to avoid repeat installation
-            -- @see https://github.com/xmake-io/xmake/issues/1579
-        else
-            require_extra.plat = os.subhost()
-            require_extra.arch = os.subarch()
-        end
     end
 
     -- check require options
@@ -197,6 +223,7 @@ function _load_require(require_str, requires_extra, parentinfo)
         originstr        = require_str,
         reponame         = reponame,
         version          = require_extra.version or version,
+        host             = require_extra.host,      -- this package is only for host machine
         plat             = require_extra.plat,      -- require package in the given platform
         arch             = require_extra.arch,      -- require package in the given architecture
         targetos         = require_extra.targetos,  -- require package in the given target os
@@ -487,6 +514,23 @@ function _check_package_configurations(package)
     end
 end
 
+-- check package toolchains
+function _check_package_toolchains(package)
+    if package:toolchains() then
+        for _, toolchain_inst in pairs(package:toolchains()) do
+            if not toolchain_inst:check() then
+                raise("toolchain(\"%s\"): not found!", toolchain_inst:name())
+            end
+        end
+    else
+        -- maybe this package is host package, it's platform and toolchain has been not checked yet.
+        local platform_inst = platform.load(package:plat(), package:arch(), {host = package:is_host()})
+        if not platform_inst:check() then
+            raise("no any matched platform for this package(%s)!", package:name())
+        end
+    end
+end
+
 -- match require path
 function _match_requirepath(requirepath, requireconf)
 
@@ -553,37 +597,33 @@ function _init_requireinfo(requireinfo, package, opt)
             requireinfo.configs.asan = project.policy("build.sanitizer.address")
         end
     end
-    -- but we will ignore some configs for buildhash in the headeronly and host/binary package
+    -- but we will ignore some configs for buildhash in the headeronly, moduleonly and host/binary package
     -- @note on_test still need these configs, @see https://github.com/xmake-io/xmake/issues/4124
-    if package:is_headeronly() or (package:is_binary() and not package:is_cross()) then
+    if package:is_headeronly() or package:is_moduleonly() or (package:is_binary() and not package:is_cross()) then
         requireinfo.ignored_configs_for_buildhash = {"runtimes", "toolchains", "lto", "asan", "pic"}
     end
 end
 
 -- finish requireinfo
 function _finish_requireinfo(requireinfo, package)
-    -- we need to synchronise the plat/arch inherited from the parent package as early as possible
-    if requireinfo.plat then
-        package:plat_set(requireinfo.plat)
-    end
-    if requireinfo.arch then
-        package:arch_set(requireinfo.arch)
-    end
     requireinfo.configs = requireinfo.configs or {}
-    if not package:is_headeronly() then
-        if package:is_plat("windows") then
-            -- @see https://github.com/xmake-io/xmake/issues/4477#issuecomment-1913249489
-            local runtimes = requireinfo.configs.runtimes
-            if runtimes then
-                runtimes = runtimes:split(",")
-            else
-                runtimes = {}
-            end
-            if not table.contains(runtimes, "MT", "MD", "MTd", "MDd") then
-                table.insert(runtimes, "MT")
-            end
-            requireinfo.configs.runtimes = table.concat(runtimes, ",")
+    if package:is_plat("windows") then
+        -- @see https://github.com/xmake-io/xmake/issues/4477#issuecomment-1913249489
+        -- @note its buildhash will be ignored for headeronly
+        local runtimes = requireinfo.configs.runtimes
+        if runtimes then
+            runtimes = runtimes:split(",")
+        else
+            runtimes = {}
         end
+        if not table.contains(runtimes, "MT", "MD", "MTd", "MDd") then
+            local vs_runtime_default = project.policy("build.c++.msvc.runtime")
+            if vs_runtime_default and is_mode("debug") then
+                vs_runtime_default = vs_runtime_default .. "d"
+            end
+            table.insert(runtimes, vs_runtime_default or "MT")
+        end
+        requireinfo.configs.runtimes = table.concat(runtimes, ",")
     end
     -- we need to ensure readonly configs
     for _, name in ipairs(table.keys(requireinfo.configs)) do
@@ -615,6 +655,12 @@ function _finish_requireinfo(requireinfo, package)
         if v == default then
             requireinfo.configs[k] = nil
         end
+    end
+
+    -- all binary packages are host package
+    -- we need to synchronize the setup to requireinfo so that all its dependent packages inherit from it.
+    if package:is_binary() then
+        requireinfo.host = true
     end
 end
 
@@ -698,6 +744,7 @@ end
 -- get package key
 function _get_packagekey(packagename, requireinfo, version)
     return _get_requirekey(requireinfo, {name = packagename,
+                                         host = requireinfo.host,
                                          plat = requireinfo.plat,
                                          arch = requireinfo.arch,
                                          kind = requireinfo.kind,
@@ -731,6 +778,9 @@ function _inherit_parent_configs(requireinfo, package, parentinfo)
         end
         if parentinfo.arch then
             requireinfo.arch = parentinfo.arch
+        end
+        if parentinfo.host then
+            requireinfo.host = parentinfo.host
         end
         requireinfo_configs.toolchains = requireinfo_configs.toolchains or parentinfo_configs.toolchains
         requireinfo_configs.runtimes = requireinfo_configs.runtimes or parentinfo_configs.runtimes
@@ -937,6 +987,13 @@ function _load_package(packagename, requireinfo, opt)
     -- save require info
     package:requireinfo_set(requireinfo)
 
+    -- only load toolchain package and its deps
+    if opt.toolchain then
+        if package:is_toplevel() and not package:is_toolchain()then
+            return
+        end
+    end
+
     -- init urls source
     package:_init_source()
 
@@ -988,6 +1045,13 @@ function _load_package(packagename, requireinfo, opt)
     -- check package configurations
     _check_package_configurations(package)
 
+    -- we need to check package toolchains before on_load and select runtimes,
+    -- because we will call compiler-specific apis in on_load/on_fetch/find_package ..
+    --
+    -- @see https://github.com/xmake-io/xmake/pull/5466
+    -- https://github.com/xmake-io/xmake/issues/4596#issuecomment-2014528801
+    _check_package_toolchains(package)
+
     -- we need to select package runtimes before computing buildhash
     -- @see https://github.com/xmake-io/xmake/pull/4630#issuecomment-1910216561
     _select_package_runtimes(package)
@@ -1004,6 +1068,13 @@ function _load_package(packagename, requireinfo, opt)
         end
     end
 
+    -- we need to check package toolchains before on_load,
+    -- because we will call compiler-specific apis in on_load/on_fetch/find_package ..
+    --
+    -- @see https://github.com/xmake-io/xmake/pull/5466
+    -- https://github.com/xmake-io/xmake/issues/4596#issuecomment-2014528801
+    _check_package_toolchains(package)
+
     -- do load
     package:_load()
 
@@ -1017,6 +1088,9 @@ function _load_package(packagename, requireinfo, opt)
 
     -- save this package package to cache
     _memcache():set2("packages", packagekey, package)
+
+    -- load ok
+    package:_mark_as_loaded()
     return package
 end
 
@@ -1270,6 +1344,9 @@ function get_configs_str(package)
     end
     if package:is_private() then
         table.insert(configs, "private")
+    end
+    if package:is_host() then
+        table.insert(configs, "host")
     end
     local requireinfo = package:requireinfo()
     if requireinfo then

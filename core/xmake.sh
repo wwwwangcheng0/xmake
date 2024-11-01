@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set_project "xmake"
-set_version "2.9.3" "%Y%m%d"
+set_version "2.9.6" "%Y%m%d"
 
 # set warning all
 set_warnings "all"
@@ -228,4 +228,4 @@ if ! has_config "external"; then
     includes "src/tbox"
 fi
 includes "src/xmake"
-includes "src/demo"
+includes "src/cli"

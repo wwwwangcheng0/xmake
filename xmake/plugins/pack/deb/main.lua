@@ -191,15 +191,23 @@ function _pack_deb(debuild, package)
     local debiandir = path.join(sourcedir, "debian")
     if not os.isdir(debiandir) then
         local debiandir_template = package:get("specfile") or path.join(os.programdir(), "scripts", "xpack", "deb", "debian")
-        os.cp(debiandir_template, debiandir)
+        os.cp(debiandir_template, debiandir, {writeable = true})
     end
 
     -- replace variables in specfile
+    -- and we need to avoid `attempt to yield across a C-call boundary` in io.gsub
     local specvars = _get_specvars(package)
     local pattern = package:extraconf("specfile", "pattern") or "%${([^\n]-)}"
+    local specvars_names = {}
+    local specvars_values = {}
     for _, specfile in ipairs(os.files(path.join(debiandir, "**"))) do
         io.gsub(specfile, "(" .. pattern .. ")", function(_, name)
-            name = name:trim()
+            table.insert(specvars_names, name)
+        end)
+    end
+    for _, name in ipairs(specvars_names) do
+        name = name:trim()
+        if specvars_values[name] == nil then
             local value = specvars[name]
             if type(value) == "function" then
                 value = value()
@@ -210,7 +218,13 @@ function _pack_deb(debuild, package)
             if type(value) == "table" then
                 dprint("invalid variable value", value)
             end
-            return value
+            specvars_values[name] = value
+        end
+    end
+    for _, specfile in ipairs(os.files(path.join(debiandir, "**"))) do
+        io.gsub(specfile, "(" .. pattern .. ")", function(_, name)
+            name = name:trim()
+            return specvars_values[name]
         end)
     end
 

@@ -186,6 +186,16 @@ function _load_vcvarsall(vcvarsall, vsver, arch, opt)
         if WindowsSDKVersion ~= "" then
             variables["WindowsSDKVersion"] = WindowsSDKVersion
         end
+    else
+        -- sometimes the variable `WindowsSDKVersion` is not available
+        -- then parse it from `WindowsSdkBinPath`, such as: `C:\\Program Files (x86)\\Windows Kits\\8.1\\bin`
+        local WindowsSdkBinPath = variables["WindowsSdkBinPath"]
+        if WindowsSdkBinPath then
+            WindowsSDKVersion = string.match(WindowsSdkBinPath, "\\(%d+%.%d+)\\bin$")
+            if WindowsSDKVersion then
+                variables["WindowsSDKVersion"] = WindowsSDKVersion
+            end
+        end
     end
 
     -- fix UCRTVersion
@@ -330,10 +340,10 @@ function _find_vstudio(opt)
             table.insert(paths, 1, vswhere_VCAuxiliaryBuildDir)
         end
         if version == "6.0" and os.arch() == "x64" then
-	    table.insert(paths, "$(reg HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\DevStudio\\6.0\\Products\\Microsoft Visual C++;ProductDir)\\Bin")
-	    table.insert(paths, "$(reg HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\6.0\\Setup\\Microsoft Visual C++;ProductDir)\\Bin")
+            table.insert(paths, "$(reg HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\DevStudio\\6.0\\Products\\Microsoft Visual C++;ProductDir)\\Bin")
+            table.insert(paths, "$(reg HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\6.0\\Setup\\Microsoft Visual C++;ProductDir)\\Bin")
         end
-		
+
         -- find vcvarsall.bat, vcvars32.bat for vs7.1
         local vcvarsall = find_file("vcvarsall.bat", paths) or find_file("vcvars32.bat", paths)
         if not vcvarsall then

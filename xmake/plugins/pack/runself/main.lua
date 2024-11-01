@@ -111,25 +111,36 @@ function _pack_runself(makeself, package)
     local specfile = path.join(package:buildir(), package:basename() .. ".lsm")
     if not os.isfile(specfile) then
         local specfile_template = package:get("specfile") or path.join(os.programdir(), "scripts", "xpack", "runself", "makeself.lsm")
-        os.cp(specfile_template, specfile)
+        os.cp(specfile_template, specfile, {writeable = true})
     end
 
     -- replace variables in specfile
     local specvars = _get_specvars(package)
     local pattern = package:extraconf("specfile", "pattern") or "%${([^\n]-)}"
+    local specvars_names = {}
+    local specvars_values = {}
+    io.gsub(specfile, "(" .. pattern .. ")", function(_, name)
+        table.insert(specvars_names, name)
+    end)
+    for _, name in ipairs(specvars_names) do
+        name = name:trim()
+        if specvars_values[name] == nil then
+            local value = specvars[name]
+            if type(value) == "function" then
+                value = value()
+            end
+            if value ~= nil then
+                dprint("  > replace %s -> %s", name, value)
+            end
+            if type(value) == "table" then
+                dprint("invalid variable value", value)
+            end
+            specvars_values[name] = value
+        end
+    end
     io.gsub(specfile, "(" .. pattern .. ")", function(_, name)
         name = name:trim()
-        local value = specvars[name]
-        if type(value) == "function" then
-            value = value()
-        end
-        if value ~= nil then
-            dprint("  > replace %s -> %s", name, value)
-        end
-        if type(value) == "table" then
-            dprint("invalid variable value", value)
-        end
-        return value
+        return specvars_values[name]
     end)
 
     -- archive source files
