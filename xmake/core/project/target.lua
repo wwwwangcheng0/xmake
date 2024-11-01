@@ -2339,7 +2339,7 @@ function _instance:pcoutputfile(langkind)
         -- @note gcc has not -include-pch option to set the pch file path
         --
         pcoutputfile = is_gcc and pcheaderfile or self:objectfile(pcheaderfile)
-        local pcoutputfilename = path.basename(pcoutputfile)
+        local pcoutputfilename = path.filename(pcoutputfile)
         if is_gcc then
             pcoutputfilename = pcoutputfilename .. ".gch"
         else
